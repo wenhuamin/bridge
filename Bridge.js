@@ -20,30 +20,11 @@
 
         var layer = comp.selectedLayers[0];
 
-        if (layer.selectedProperties.length !== 1) {
-            alert("Please select exactly ONE animated property.");
-            return;
-        }
-
-        var prop = layer.selectedProperties[0];
-
-        if (prop.numKeys < 2) {
-            alert("Property must have at least 2 keyframes.");
-            return;
-        }
-
         app.beginUndoGroup("Export Motion Spec");
-
-        // --- PROPERTY DETECTION ---
-        var mn = prop.matchName;
-        var isCombinedPosition = (mn === "ADBE Position" || mn === "ADBE Anchor Point" || prop.name === "Position" || prop.name === "Anchor Point");
-        var isSeparatedPosition = (mn === "ADBE Position_0" || mn === "ADBE Position_1" || mn === "ADBE Position_2");
-        var isScale = (mn === "ADBE Scale" || prop.name === "Scale");
-        var isOpacity = (mn === "ADBE Opacity" || prop.name === "Opacity");
-        var isRotation = (mn === "ADBE Rotate Z" || mn === "ADBE Rotate X" || mn === "ADBE Rotate Y" || mn === "ADBE Orientation" || prop.name === "Rotation" || prop.name === "X Rotation" || prop.name === "Y Rotation" || prop.name === "Z Rotation");
 
         // --- SAFE UNICODE CHARS ---
         var arrow = " \u2192 ";
+        var axisLabels = ["X", "Y", "Z"];
 
         // --- HELPER FUNCTIONS ---
         function clamp(v) {
@@ -120,134 +101,158 @@
             return Math.round(v1) !== Math.round(v2);
         }
 
-        // --- LOOP THROUGH KEYFRAME PAIRS ---
-        var outputEntries = [];
-        var axisLabels = ["X", "Y", "Z"];
-        var numKeys = prop.numKeys;
+        // --- DETECT PROPERTY TYPE ---
+        function getPropertyType(prop) {
+            var mn = prop.matchName;
+            var nm = prop.name;
+            if (mn === "ADBE Position" || mn === "ADBE Anchor Point" || nm === "Position" || nm === "Anchor Point") return "combinedPosition";
+            if (mn === "ADBE Position_0" || mn === "ADBE Position_1" || mn === "ADBE Position_2") return "separatedPosition";
+            if (mn === "ADBE Scale" || nm === "Scale") return "scale";
+            if (mn === "ADBE Opacity" || nm === "Opacity") return "opacity";
+            if (mn === "ADBE Rotate Z" || mn === "ADBE Rotate X" || mn === "ADBE Rotate Y" || mn === "ADBE Orientation" || nm === "Rotation" || nm === "X Rotation" || nm === "Y Rotation" || nm === "Z Rotation") return "rotation";
+            return "other";
+        }
 
-        for (var k = 1; k < numKeys; k++) {
-            var t1 = prop.keyTime(k);
-            var t2 = prop.keyTime(k + 1);
-            var v1 = prop.keyValue(k);
-            var v2 = prop.keyValue(k + 1);
+        // --- PROCESS A SINGLE PROPERTY ---
+        function processProperty(prop, entries) {
+            if (!(prop instanceof Property)) return;
+            if (prop.numKeys < 2) return;
 
-            // Skip pairs with no value change
-            if (!hasValueChange(v1, v2)) continue;
+            var propType = getPropertyType(prop);
+            var numKeys = prop.numKeys;
 
-            var delay = t1 * 1000;
-            var duration = (t2 - t1) * 1000;
-            var delayStr = Math.round(delay) + "ms";
-            var durationStr = Math.round(duration) + "ms";
-            var cubic = computeCubic(prop, k, t1, t2, v1, v2);
+            for (var k = 1; k < numKeys; k++) {
+                var t1 = prop.keyTime(k);
+                var t2 = prop.keyTime(k + 1);
+                var v1 = prop.keyValue(k);
+                var v2 = prop.keyValue(k + 1);
 
-            if (isCombinedPosition && v1 instanceof Array) {
-                // Split combined position into separate entries per changed axis
-                for (var i = 0; i < v1.length && i < axisLabels.length; i++) {
-                    var delta = Math.round(v2[i] - v1[i]);
-                    if (delta !== 0) {
-                        var sign = delta > 0 ? "+" : "";
-                        outputEntries.push(
-                            "Layer: " + layer.name + "\n" +
-                            "Property: " + axisLabels[i] + " Position\n" +
-                            "Value Change: " + sign + delta + "dp\n" +
-                            "Delay: " + delayStr + "\n" +
-                            "Duration: " + durationStr + "\n" +
-                            "Interpolation: " + cubic
-                        );
+                if (!hasValueChange(v1, v2)) continue;
+
+                var delay = t1 * 1000;
+                var duration = (t2 - t1) * 1000;
+                var delayStr = Math.round(delay) + "ms";
+                var durationStr = Math.round(duration) + "ms";
+                var cubic = computeCubic(prop, k, t1, t2, v1, v2);
+
+                if (propType === "combinedPosition" && v1 instanceof Array) {
+                    for (var i = 0; i < v1.length && i < axisLabels.length; i++) {
+                        var delta = Math.round(v2[i] - v1[i]);
+                        if (delta !== 0) {
+                            var sign = delta > 0 ? "+" : "";
+                            entries.push(
+                                "Property: " + axisLabels[i] + " Position\n" +
+                                "Value Change: " + sign + delta + "dp\n" +
+                                "Delay: " + delayStr + "\n" +
+                                "Duration: " + durationStr + "\n" +
+                                "Interpolation: " + cubic
+                            );
+                        }
                     }
-                }
-            } else if (isSeparatedPosition) {
-                var delta = Math.round(v2 - v1);
-                var sign = delta > 0 ? "+" : "";
-                outputEntries.push(
-                    "Layer: " + layer.name + "\n" +
-                    "Property: " + prop.name + "\n" +
-                    "Value Change: " + sign + delta + "dp\n" +
-                    "Delay: " + delayStr + "\n" +
-                    "Duration: " + durationStr + "\n" +
-                    "Interpolation: " + cubic
-                );
-            } else if (isScale && v1 instanceof Array) {
-                var sx1 = Math.round(v1[0]);
-                var sy1 = Math.round(v1[1]);
-                var sx2 = Math.round(v2[0]);
-                var sy2 = Math.round(v2[1]);
-                var xChanged = (sx1 !== sx2);
-                var yChanged = (sy1 !== sy2);
-                var sameChange = (sx1 === sy1 && sx2 === sy2);
-
-                if (sameChange) {
-                    outputEntries.push(
-                        "Layer: " + layer.name + "\n" +
-                        "Property: Scale\n" +
-                        "Value Change: " + sx1 + "%" + arrow + sx2 + "%\n" +
+                } else if (propType === "separatedPosition") {
+                    var delta = Math.round(v2 - v1);
+                    var sign = delta > 0 ? "+" : "";
+                    entries.push(
+                        "Property: " + prop.name + "\n" +
+                        "Value Change: " + sign + delta + "dp\n" +
                         "Delay: " + delayStr + "\n" +
                         "Duration: " + durationStr + "\n" +
                         "Interpolation: " + cubic
                     );
-                } else {
-                    if (xChanged) {
-                        outputEntries.push(
-                            "Layer: " + layer.name + "\n" +
-                            "Property: X Scale\n" +
+                } else if (propType === "scale" && v1 instanceof Array) {
+                    var sx1 = Math.round(v1[0]);
+                    var sy1 = Math.round(v1[1]);
+                    var sx2 = Math.round(v2[0]);
+                    var sy2 = Math.round(v2[1]);
+                    var xChanged = (sx1 !== sx2);
+                    var yChanged = (sy1 !== sy2);
+                    var sameChange = (sx1 === sy1 && sx2 === sy2);
+
+                    if (sameChange) {
+                        entries.push(
+                            "Property: Scale\n" +
                             "Value Change: " + sx1 + "%" + arrow + sx2 + "%\n" +
                             "Delay: " + delayStr + "\n" +
                             "Duration: " + durationStr + "\n" +
                             "Interpolation: " + cubic
                         );
+                    } else {
+                        if (xChanged) {
+                            entries.push(
+                                "Property: X Scale\n" +
+                                "Value Change: " + sx1 + "%" + arrow + sx2 + "%\n" +
+                                "Delay: " + delayStr + "\n" +
+                                "Duration: " + durationStr + "\n" +
+                                "Interpolation: " + cubic
+                            );
+                        }
+                        if (yChanged) {
+                            entries.push(
+                                "Property: Y Scale\n" +
+                                "Value Change: " + sy1 + "%" + arrow + sy2 + "%\n" +
+                                "Delay: " + delayStr + "\n" +
+                                "Duration: " + durationStr + "\n" +
+                                "Interpolation: " + cubic
+                            );
+                        }
                     }
-                    if (yChanged) {
-                        outputEntries.push(
-                            "Layer: " + layer.name + "\n" +
-                            "Property: Y Scale\n" +
-                            "Value Change: " + sy1 + "%" + arrow + sy2 + "%\n" +
-                            "Delay: " + delayStr + "\n" +
-                            "Duration: " + durationStr + "\n" +
-                            "Interpolation: " + cubic
-                        );
-                    }
+                } else if (propType === "opacity") {
+                    entries.push(
+                        "Property: Opacity\n" +
+                        "Value Change: " + Math.round(v1) + "%" + arrow + Math.round(v2) + "%\n" +
+                        "Delay: " + delayStr + "\n" +
+                        "Duration: " + durationStr + "\n" +
+                        "Interpolation: " + cubic
+                    );
+                } else if (propType === "rotation") {
+                    entries.push(
+                        "Property: " + prop.name + "\n" +
+                        "Value Change: " + Math.round(v1) + arrow + Math.round(v2) + "\n" +
+                        "Delay: " + delayStr + "\n" +
+                        "Duration: " + durationStr + "\n" +
+                        "Interpolation: " + cubic
+                    );
+                } else {
+                    entries.push(
+                        "Property: " + prop.name + "\n" +
+                        "Value Change: " + formatValue(v1) + arrow + formatValue(v2) + "\n" +
+                        "Delay: " + delayStr + "\n" +
+                        "Duration: " + durationStr + "\n" +
+                        "Interpolation: " + cubic
+                    );
                 }
-            } else if (isOpacity) {
-                outputEntries.push(
-                    "Layer: " + layer.name + "\n" +
-                    "Property: Opacity\n" +
-                    "Value Change: " + Math.round(v1) + "%" + arrow + Math.round(v2) + "%\n" +
-                    "Delay: " + delayStr + "\n" +
-                    "Duration: " + durationStr + "\n" +
-                    "Interpolation: " + cubic
-                );
-            } else if (isRotation) {
-                outputEntries.push(
-                    "Layer: " + layer.name + "\n" +
-                    "Property: " + prop.name + "\n" +
-                    "Value Change: " + Math.round(v1) + arrow + Math.round(v2) + "\n" +
-                    "Delay: " + delayStr + "\n" +
-                    "Duration: " + durationStr + "\n" +
-                    "Interpolation: " + cubic
-                );
-            } else {
-                outputEntries.push(
-                    "Layer: " + layer.name + "\n" +
-                    "Property: " + prop.name + "\n" +
-                    "Value Change: " + formatValue(v1) + arrow + formatValue(v2) + "\n" +
-                    "Delay: " + delayStr + "\n" +
-                    "Duration: " + durationStr + "\n" +
-                    "Interpolation: " + cubic
-                );
             }
         }
 
+        // --- RECURSIVELY SCAN ALL PROPERTIES ---
+        function scanProperties(group, entries) {
+            for (var i = 1; i <= group.numProperties; i++) {
+                var p = group.property(i);
+                if (p instanceof PropertyGroup) {
+                    scanProperties(p, entries);
+                } else if (p instanceof Property) {
+                    processProperty(p, entries);
+                }
+            }
+        }
+
+        // --- COLLECT ALL ANIMATED PROPERTY ENTRIES ---
+        var outputEntries = [];
+        scanProperties(layer, outputEntries);
+
         if (outputEntries.length === 0) {
-            alert("No value changes detected between keyframes.");
+            alert("No animated value changes detected on this layer.");
             app.endUndoGroup();
             return;
         }
 
-        var output = outputEntries.join("\n\n");
+        // --- BUILD OUTPUT WITH LAYER NAME AT TOP ---
+        var output = "Layer: " + layer.name + "\n\n" + outputEntries.join("\n\n");
 
-        // Copy to clipboard (Mac only)
+        // Copy to clipboard (Mac only) - use ASCII arrow for clipboard compatibility
         try {
-            var escapedOutput = output.replace(/"/g, '\\"');
+            var clipOutput = output.replace(/\u2192/g, "->");
+            var escapedOutput = clipOutput.replace(/"/g, '\\"');
             var cmd = 'echo "' + escapedOutput + '" | pbcopy';
             system.callSystem(cmd);
         } catch (e) {
