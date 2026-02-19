@@ -64,57 +64,61 @@
 
         var valueChange = formatValue(v1) + " → " + formatValue(v2);
 
+        // --- CHECK INTERPOLATION TYPE ---
+        var outType = prop.keyOutInterpolationType(1);
+        var inType = prop.keyInInterpolationType(2);
+        var isLinear = (outType === KeyframeInterpolationType.LINEAR && inType === KeyframeInterpolationType.LINEAR);
+
         // --- CUBIC BEZIER CONVERSION ---
-        var deltaValue;
-
-        if (v1 instanceof Array) {
-            deltaValue = v2[0] - v1[0]; // use first dimension for speed calc
-        } else {
-            deltaValue = v2 - v1;
-        }
-
-        var deltaTime = t2 - t1;
-        var avgSpeed = deltaValue / deltaTime;
-
-        var x1 = influenceOut / 100;
-        var x2 = 1 - (influenceIn / 100);
-
-        var y1 = 0;
-        var y2 = 1;
-
-        if (avgSpeed !== 0) {
-            y1 = (speedOut / avgSpeed) * x1;
-            y2 = 1 - ((speedIn / avgSpeed) * (1 - x2));
-        }
-
-        function clamp(v) {
-            return Math.min(Math.max(v, 0), 1);
-        }
-
-        x1 = clamp(x1);
-        y1 = clamp(y1);
-        x2 = clamp(x2);
-        y2 = clamp(y2);
-
-        function round2(n) {
-            var v = Math.round(n * 100) / 100;
-            var s = v.toString();
-            var dot = s.indexOf(".");
-            if (dot === -1) {
-                s += ".00";
-            } else {
-                var decimals = s.length - dot - 1;
-                if (decimals === 1) s += "0";
-            }
-            return s;
-        }
-
-        var isLinear = (x1 === 0 && y1 === 0 && x2 === 1 && y2 === 1);
-
         var cubic;
+
         if (isLinear) {
             cubic = "cubic-bezier(0.00, 0.00, 1.00, 1.00)";
         } else {
+            var deltaValue;
+
+            if (v1 instanceof Array) {
+                deltaValue = v2[0] - v1[0]; // use first dimension for speed calc
+            } else {
+                deltaValue = v2 - v1;
+            }
+
+            var deltaTime = t2 - t1;
+            var avgSpeed = deltaValue / deltaTime;
+
+            var x1 = influenceOut / 100;
+            var x2 = 1 - (influenceIn / 100);
+
+            var y1 = 0;
+            var y2 = 1;
+
+            if (avgSpeed !== 0) {
+                y1 = (speedOut / avgSpeed) * x1;
+                y2 = 1 - ((speedIn / avgSpeed) * (1 - x2));
+            }
+
+            function clamp(v) {
+                return Math.min(Math.max(v, 0), 1);
+            }
+
+            x1 = clamp(x1);
+            y1 = clamp(y1);
+            x2 = clamp(x2);
+            y2 = clamp(y2);
+
+            function round2(n) {
+                var v = Math.round(n * 100) / 100;
+                var s = v.toString();
+                var dot = s.indexOf(".");
+                if (dot === -1) {
+                    s += ".00";
+                } else {
+                    var decimals = s.length - dot - 1;
+                    if (decimals === 1) s += "0";
+                }
+                return s;
+            }
+
             cubic = "cubic-bezier(" +
                 round2(x1) + ", " +
                 round2(y1) + ", " +
