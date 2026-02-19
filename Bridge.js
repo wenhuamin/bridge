@@ -55,14 +55,37 @@
         var duration = (t2 - t1) * 1000;
 
         // --- VALUE CHANGE ---
-        function formatValue(val) {
-            if (val instanceof Array) {
-                return val.join(", ");
-            }
-            return val;
-        }
+        var valueChange;
+        var mn = prop.matchName;
+        var isPosition = (mn === "ADBE Position" || mn === "ADBE Position_0" || mn === "ADBE Position_1" || mn === "ADBE Position_2" || mn === "ADBE Anchor Point" || prop.name === "Position" || prop.name === "Anchor Point");
 
-        var valueChange = formatValue(v1) + " → " + formatValue(v2);
+        if (isPosition && v1 instanceof Array) {
+            // Position (combined): show only changed axes as deltas
+            var axes = ["x", "y", "z"];
+            var parts = [];
+            for (var i = 0; i < v1.length && i < axes.length; i++) {
+                var delta = Math.round(v2[i] - v1[i]);
+                if (delta !== 0) {
+                    var sign = delta > 0 ? "+" : "";
+                    parts.push(axes[i] + " " + sign + delta);
+                }
+            }
+            valueChange = parts.length > 0 ? parts.join(", ") : "no change";
+        } else if (isPosition) {
+            // Position (separated dimension): single delta
+            var delta = Math.round(v2 - v1);
+            var sign = delta > 0 ? "+" : "";
+            valueChange = sign + delta;
+        } else {
+            // Other properties (opacity, scale, etc.): show start → end
+            function formatValue(val) {
+                if (val instanceof Array) {
+                    return val.join(", ");
+                }
+                return val;
+            }
+            valueChange = formatValue(v1) + " → " + formatValue(v2);
+        }
 
         // --- CHECK INTERPOLATION TYPE ---
         var outType = prop.keyOutInterpolationType(1);
