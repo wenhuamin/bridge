@@ -13,18 +13,15 @@
             return;
         }
 
-        if (comp.selectedLayers.length !== 1) {
-            alert("Please select exactly ONE layer.");
-            return;
-        }
-
-        var layer = comp.selectedLayers[0];
-
         app.beginUndoGroup("Export Motion Spec");
 
         // --- SAFE UNICODE CHARS ---
         var arrow = " \u2192 ";
         var axisLabels = ["X", "Y", "Z"];
+
+        // --- WORK AREA BOUNDS ---
+        var waStart = comp.workAreaStart;
+        var waEnd = waStart + comp.workAreaDuration;
 
         // --- HELPER FUNCTIONS ---
         function clamp(v) {
@@ -124,12 +121,16 @@
             for (var k = 1; k < numKeys; k++) {
                 var t1 = prop.keyTime(k);
                 var t2 = prop.keyTime(k + 1);
+
+                // Skip keyframe pairs outside the work area
+                if (t1 < waStart || t2 > waEnd) continue;
+
                 var v1 = prop.keyValue(k);
                 var v2 = prop.keyValue(k + 1);
 
                 if (!hasValueChange(v1, v2)) continue;
 
-                var delay = t1 * 1000;
+                var delay = (t1 - waStart) * 1000;
                 var duration = (t2 - t1) * 1000;
                 var delayStr = Math.round(delay) + "ms";
                 var durationStr = Math.round(duration) + "ms";
@@ -236,18 +237,92 @@
             }
         }
 
-        // --- COLLECT ALL ANIMATED PROPERTY ENTRIES ---
-        var outputEntries = [];
-        scanProperties(layer, outputEntries);
+        // --- DETERMINE SELECTION MODE ---
+        var output;
+        var selectedLayers = comp.selectedLayers;
+        var hasPropSelected = false;
+        var selectedProp = null;
+        var propLayer = null;
 
-        if (outputEntries.length === 0) {
-            alert("No animated value changes detected on this layer.");
-            app.endUndoGroup();
-            return;
+        // Check if a single animated property is selected on a selected layer
+        // (selectedProperties includes parent PropertyGroups in the hierarchy,
+        //  so filter down to actual Property instances with keyframes)
+        if (selectedLayers.length === 1) {
+            var selProps = selectedLayers[0].selectedProperties;
+            var animatedProps = [];
+            for (var p = 0; p < selProps.length; p++) {
+                if (selProps[p] instanceof Property && selProps[p].numKeys >= 2) {
+                    animatedProps.push(selProps[p]);
+                }
+            }
+            if (animatedProps.length === 1) {
+                hasPropSelected = true;
+                selectedProp = animatedProps[0];
+                propLayer = selectedLayers[0];
+            }
         }
 
-        // --- BUILD OUTPUT WITH LAYER NAME AT TOP ---
-        var output = "Layer: " + layer.name + "\n\n" + outputEntries.join("\n\n");
+        if (hasPropSelected) {
+            // MODE 1: Single property selected
+            var entries = [];
+            processProperty(selectedProp, entries);
+
+            if (entries.length === 0) {
+                alert("No value changes detected on this property.");
+                app.endUndoGroup();
+                return;
+            }
+
+            output = propLayer.name + "\n\n" + entries.join("\n\n");
+
+        } else if (selectedLayers.length > 0) {
+            // MODE 2: Layer(s) selected - scan all properties on selected layers
+            var layerOutputs = [];
+
+            for (var L = selectedLayers.length - 1; L >= 0; L--) {
+                var layer = selectedLayers[L];
+                var layerEntries = [];
+                scanProperties(layer, layerEntries);
+
+                if (layerEntries.length > 0) {
+                    var layerNum = layerOutputs.length + 1;
+                    var layerBlock = layerNum + ". " + layer.name + "\n\n" + layerEntries.join("\n\n");
+                    layerOutputs.push(layerBlock);
+                }
+            }
+
+            if (layerOutputs.length === 0) {
+                alert("No animated value changes detected on selected layers.");
+                app.endUndoGroup();
+                return;
+            }
+
+            output = layerOutputs.join("\n\n\n");
+
+        } else {
+            // MODE 3: Nothing selected - scan all layers in comp
+            var layerOutputs = [];
+
+            for (var L = comp.numLayers; L >= 1; L--) {
+                var layer = comp.layer(L);
+                var layerEntries = [];
+                scanProperties(layer, layerEntries);
+
+                if (layerEntries.length > 0) {
+                    var layerNum = layerOutputs.length + 1;
+                    var layerBlock = layerNum + ". " + layer.name + "\n\n" + layerEntries.join("\n\n");
+                    layerOutputs.push(layerBlock);
+                }
+            }
+
+            if (layerOutputs.length === 0) {
+                alert("No animated value changes detected in this composition.");
+                app.endUndoGroup();
+                return;
+            }
+
+            output = layerOutputs.join("\n\n\n");
+        }
 
         // Copy to clipboard (Mac only) - use ASCII arrow for clipboard compatibility
         try {
@@ -259,7 +334,14 @@
             alert("Could not copy to clipboard. Ensure 'Allow Scripts to Write Files and Access Network' is enabled in Preferences.\n\nError: " + e.toString());
         }
 
-        alert(output);
+        // Show alert (capped at 50 lines, full output is on clipboard)
+        var lines = output.split("\n");
+        if (lines.length > 50) {
+            var truncated = lines.slice(0, 50).join("\n");
+            alert(truncated + "\n\n... (" + lines.length + " total lines, full output copied to clipboard)");
+        } else {
+            alert(output);
+        }
 
         app.endUndoGroup();
     }
