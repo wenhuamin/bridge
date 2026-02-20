@@ -107,6 +107,7 @@
             if (mn === "ADBE Scale" || nm === "Scale") return "scale";
             if (mn === "ADBE Opacity" || nm === "Opacity") return "opacity";
             if (mn === "ADBE Rotate Z" || mn === "ADBE Rotate X" || mn === "ADBE Rotate Y" || mn === "ADBE Orientation" || nm === "Rotation" || nm === "X Rotation" || nm === "Y Rotation" || nm === "Z Rotation") return "rotation";
+            if (prop.propertyValueType === PropertyValueType.COLOR) return "color";
             return "other";
         }
 
@@ -209,6 +210,21 @@
                     entries.push(
                         "Property: " + prop.name + "\n" +
                         "Value Change: " + Math.round(v1) + arrow + Math.round(v2) + "\n" +
+                        "Delay: " + delayStr + "\n" +
+                        "Duration: " + durationStr + "\n" +
+                        "Interpolation: " + cubic
+                    );
+                } else if (propType === "color" && v1 instanceof Array) {
+                    function toHex(c) {
+                        var h = Math.round(c * 255).toString(16);
+                        if (h.length < 2) h = "0" + h;
+                        return h;
+                    }
+                    var hex1 = "#" + toHex(v1[0]) + toHex(v1[1]) + toHex(v1[2]);
+                    var hex2 = "#" + toHex(v2[0]) + toHex(v2[1]) + toHex(v2[2]);
+                    entries.push(
+                        "Property: " + prop.name + "\n" +
+                        "Value Change: " + hex1.toUpperCase() + arrow + hex2.toUpperCase() + "\n" +
                         "Delay: " + delayStr + "\n" +
                         "Duration: " + durationStr + "\n" +
                         "Interpolation: " + cubic
