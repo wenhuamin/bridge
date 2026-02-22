@@ -1,0 +1,338 @@
+/* Bridge — CEP Panel Styles */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap');
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+:root {
+    --bg: #1c1c1c;
+    --surface: #252525;
+    --surface2: #2e2e2e;
+    --border: #383838;
+    --accent: #5b8af5;
+    --accent-dim: #3d5fa8;
+    --text: #e0e0e0;
+    --text-dim: #888;
+    --text-muted: #555;
+    --green: #4caf84;
+    --red: #e05c5c;
+    --font-ui: 'Inter', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', 'Courier New', monospace;
+    --radius: 6px;
+    --radius-sm: 4px;
+}
+
+html,
+body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 12px;
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout ───────────────────────────────────────────────── */
+
+#app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100%;
+    overflow: hidden;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+
+#header {
+    flex-shrink: 0;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+}
+
+#header .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    margin-bottom: 2px;
+}
+
+#header h1 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text);
+}
+
+#header .version {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+#help-btn {
+    margin-left: auto;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 18px;
+    text-align: center;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+#help-btn:hover {
+    background: var(--surface2);
+    border-color: #4a4a4a;
+    color: var(--text);
+}
+
+#help-btn:active {
+    background: #1a1a1a;
+    border-color: var(--accent-dim);
+    color: var(--text);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+#header .subtitle {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 400;
+}
+
+/* ── Mode buttons ─────────────────────────────────────────── */
+
+#modes {
+    flex-shrink: 0;
+    padding: 10px 12px 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+#modes .label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-bottom: 7px;
+}
+
+#btn-row {
+    display: flex;
+    gap: 5px;
+}
+
+/* Normal state */
+#btn-row button {
+    flex: 1;
+    padding: 6px 4px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Hover state */
+#btn-row button:hover {
+    background: var(--surface2);
+    border-color: #4a4a4a;
+    color: var(--text);
+}
+
+/* Pressed state */
+#btn-row button:active {
+    background: #1a1a1a;
+    border-color: var(--accent-dim);
+    color: var(--text);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* Selected state (mode buttons only) */
+#btn-row button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    box-shadow: 0 0 0 1px rgba(91, 138, 245, 0.3);
+}
+
+/* Selected + hover */
+#btn-row button.active:hover {
+    background: #6b96f7;
+    border-color: #6b96f7;
+    color: #fff;
+}
+
+/* Selected + pressed */
+#btn-row button.active:active {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+    color: #fff;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── Mode description ─────────────────────────────────────── */
+
+#mode-desc {
+    flex-shrink: 0;
+    padding: 6px 12px 8px;
+    font-size: 10px;
+    color: var(--text-dim);
+    font-style: italic;
+    border-bottom: 1px solid var(--border);
+    min-height: 28px;
+    line-height: 1.4;
+}
+
+/* ── Output area ──────────────────────────────────────────── */
+
+#output-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 10px 12px 8px;
+    gap: 6px;
+}
+
+#output-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+}
+
+#output-header .label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+/* Clear button — normal */
+#clear-btn {
+    padding: 3px 9px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--font-ui);
+    font-size: 10px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+/* Clear — hover */
+#clear-btn:hover {
+    background: var(--surface2);
+    border-color: #4a4a4a;
+    color: var(--text);
+}
+
+/* Clear — pressed */
+#clear-btn:active {
+    background: #1a1a1a;
+    border-color: var(--border);
+    color: var(--text-dim);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+#output {
+    flex: 1;
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    padding: 10px;
+    resize: none;
+    outline: none;
+    overflow-y: auto;
+    tab-size: 4;
+    white-space: pre;
+    overflow-wrap: normal;
+    transition: border-color 0.15s;
+}
+
+#output:focus {
+    border-color: var(--accent-dim);
+}
+
+/* ── Footer ───────────────────────────────────────────────── */
+
+#footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--border);
+}
+
+/* Copy button — normal */
+#copy-btn {
+    flex: 1;
+    padding: 7px 12px;
+    border: 1px solid var(--accent-dim);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--accent);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: none;
+    /* No transition for text/state changes */
+}
+
+/* Copy — hover */
+#copy-btn:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    transition: background 0.06s;
+    /* Transition only for hover */
+}
+
+/* Copy — pressed */
+#copy-btn:active {
+    background: var(--accent-dim);
+    border-color: var(--accent-dim);
+    color: #fff;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+    transition: none;
+}
+
+#mode-desc.error {
+    color: var(--red);
+    font-weight: 500;
+}

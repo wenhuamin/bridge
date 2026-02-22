@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Bridge</title>
+    <link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body>
+
+    <div id="app">
+
+        <!-- Header -->
+        <header id="header">
+            <div class="title-row">
+                <h1>BRIDGE</h1>
+                <span class="version">v2.0</span>
+                <button id="help-btn" title="Open workflow guide">?</button>
+            </div>
+            <div class="subtitle">Motion Spec Exporter</div>
+        </header>
+
+        <!-- Mode buttons -->
+        <section id="modes">
+            <div class="label">Extract Mode</div>
+            <div id="btn-row">
+                <button id="btn-auto" title="Auto-detect: keyframes, layer, or full comp">Auto</button>
+                <button id="btn-keys" title="Spec only the 2+ keyframes selected in the timeline">Keys</button>
+                <button id="btn-layers" title="Spec all animated properties on selected layer(s)">Layers</button>
+                <button id="btn-comp" title="Spec every animated layer in the full composition">Comp</button>
+            </div>
+        </section>
+
+        <!-- Mode description -->
+        <div id="mode-desc">Select keyframes, a layer, or nothing — then press Auto.</div>
+
+        <!-- Output -->
+        <section id="output-section">
+            <div id="output-header">
+                <span class="label">Output</span>
+                <button id="clear-btn">Clear</button>
+            </div>
+            <textarea id="output" spellcheck="false" autocomplete="off" readonly></textarea>
+        </section>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <button id="copy-btn">Copy to Clipboard</button>
+        </footer>
+
+    </div>
+
+    <script src="js/CSInterface.js"></script>
+    <script src="js/main.js"></script>
+</body>
+
+</html>

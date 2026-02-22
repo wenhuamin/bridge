@@ -64,61 +64,81 @@
                     if (dt <= 0) return "0.00, 0.00, 1.00, 1.00";
                     var outEase = prop.keyOutTemporalEase(k);
                     var inEase = prop.keyInTemporalEase(k + 1);
-                    // x1/x2 from influence are geometrically correct
                     var x1 = Math.max(0, Math.min(1, outEase[0].influence / 100));
                     var x2 = Math.max(0, Math.min(1, 1 - inEase[0].influence / 100));
 
-                    // Normalise a sampled value to scalar progress [0..1] along v1→v2
-                    function normVal(v) {
-                        if (v1 instanceof Array) {
-                            var num = 0, den = 0;
-                            for (var i = 0; i < v1.length; i++) {
-                                num += (v[i] - v1[i]) * (v2[i] - v1[i]);
-                                den += (v2[i] - v1[i]) * (v2[i] - v1[i]);
-                            }
-                            return den < 1e-6 ? 0 : num / den;
-                        }
-                        var d = v2 - v1;
-                        return Math.abs(d) < 1e-6 ? 0 : (v - v1) / d;
-                    }
+                    // Check if expression is active — if so, valueAtTime is distorted
+                    var hasExpr = false;
+                    try { hasExpr = prop.expressionEnabled && prop.expression !== ""; } catch (e) { }
 
-                    // x(t) curve — invert s→t via bisection
-                    function xBez(t) {
-                        return 3 * x1 * t * (1 - t) * (1 - t) + 3 * x2 * t * t * (1 - t) + t * t * t;
-                    }
-                    function findT(s) {
-                        if (s <= 0) return 0;
-                        if (s >= 1) return 1;
-                        var lo = 0, hi = 1, mid;
-                        for (var it = 0; it < 20; it++) {
-                            mid = (lo + hi) * 0.5;
-                            if (xBez(mid) < s) lo = mid; else hi = mid;
-                        }
-                        return (lo + hi) * 0.5;
-                    }
-
-                    // Sample animation at N interior points; build 2×2 least-squares for y1,y2
-                    var N = 7, A = 0, B = 0, C = 0, D = 0, E = 0, cnt = 0;
-                    for (var i = 1; i <= N; i++) {
-                        var s = i / (N + 1);
-                        var vSamp;
-                        try { vSamp = prop.valueAtTime(t1 + s * dt, false); } catch (e2) { continue; }
-                        var ys = normVal(vSamp);
-                        var tb = findT(s);
-                        var ai = 3 * tb * (1 - tb) * (1 - tb);
-                        var bi = 3 * tb * tb * (1 - tb);
-                        var ci = ys - tb * tb * tb;
-                        A += ai * ai; B += ai * bi; C += bi * bi; D += ai * ci; E += bi * ci;
-                        cnt++;
-                    }
                     var y1, y2;
-                    if (cnt < 2) {
-                        y1 = 0; y2 = 1;
+
+                    if (hasExpr) {
+                        // Compute y1/y2 from keyframe speed metadata (ignores expression)
+                        var range = 0;
+                        if (v1 instanceof Array) {
+                            for (var i = 0; i < v1.length; i++) range += (v2[i] - v1[i]) * (v2[i] - v1[i]);
+                            range = Math.sqrt(range);
+                        } else {
+                            range = Math.abs(v2 - v1);
+                        }
+                        if (range < 1e-6) {
+                            y1 = 0; y2 = 1;
+                        } else {
+                            var normSpeedOut = (outEase[0].speed * dt) / range;
+                            var normSpeedIn = (inEase[0].speed * dt) / range;
+                            y1 = normSpeedOut * x1;
+                            y2 = 1 - normSpeedIn * (1 - x2);
+                        }
                     } else {
-                        var det = A * C - B * B;
-                        if (Math.abs(det) < 1e-10) { y1 = 0; y2 = 1; }
-                        else { y1 = (D * C - E * B) / det; y2 = (A * E - B * D) / det; }
+                        // No expression — sample with valueAtTime for accurate least-squares fit
+                        function normVal(v) {
+                            if (v1 instanceof Array) {
+                                var num = 0, den = 0;
+                                for (var i = 0; i < v1.length; i++) {
+                                    num += (v[i] - v1[i]) * (v2[i] - v1[i]);
+                                    den += (v2[i] - v1[i]) * (v2[i] - v1[i]);
+                                }
+                                return den < 1e-6 ? 0 : num / den;
+                            }
+                            var d = v2 - v1;
+                            return Math.abs(d) < 1e-6 ? 0 : (v - v1) / d;
+                        }
+                        function xBez(t) {
+                            return 3 * x1 * t * (1 - t) * (1 - t) + 3 * x2 * t * t * (1 - t) + t * t * t;
+                        }
+                        function findT(s) {
+                            if (s <= 0) return 0;
+                            if (s >= 1) return 1;
+                            var lo = 0, hi = 1, mid;
+                            for (var it = 0; it < 20; it++) {
+                                mid = (lo + hi) * 0.5;
+                                if (xBez(mid) < s) lo = mid; else hi = mid;
+                            }
+                            return (lo + hi) * 0.5;
+                        }
+                        var N = 7, lsA = 0, lsB = 0, lsC = 0, lsD = 0, lsE = 0, cnt = 0;
+                        for (var i = 1; i <= N; i++) {
+                            var s = i / (N + 1);
+                            var vSamp;
+                            try { vSamp = prop.valueAtTime(t1 + s * dt, false); } catch (e2) { continue; }
+                            var ys = normVal(vSamp);
+                            var tb = findT(s);
+                            var ai = 3 * tb * (1 - tb) * (1 - tb);
+                            var bi = 3 * tb * tb * (1 - tb);
+                            var ci = ys - tb * tb * tb;
+                            lsA += ai * ai; lsB += ai * bi; lsC += bi * bi; lsD += ai * ci; lsE += bi * ci;
+                            cnt++;
+                        }
+                        if (cnt < 2) {
+                            y1 = 0; y2 = 1;
+                        } else {
+                            var det = lsA * lsC - lsB * lsB;
+                            if (Math.abs(det) < 1e-10) { y1 = 0; y2 = 1; }
+                            else { y1 = (lsD * lsC - lsE * lsB) / det; y2 = (lsA * lsE - lsB * lsD) / det; }
+                        }
                     }
+
                     return round2(x1).toFixed(2) + ", " + round2(y1).toFixed(2) + ", " +
                         round2(x2).toFixed(2) + ", " + round2(y2).toFixed(2);
                 } catch (e) {
@@ -291,7 +311,6 @@
             function processExpressionProperty(prop, entries, rangeStart, rangeEnd) {
                 if (!(prop instanceof Property)) return;
                 if (!prop.expressionEnabled || prop.expression === "") return;
-                if (prop.numKeys >= 2) return;
                 if (rangeStart === undefined) rangeStart = waStart;
                 if (rangeEnd === undefined) rangeEnd = waEnd;
                 var propType = getPropertyType(prop);
@@ -332,9 +351,9 @@
                     var p; try { p = group.property(i); } catch (e) { continue; }
                     if (p instanceof PropertyGroup) { scanProperties(p, entries, rs, re); }
                     else if (p instanceof Property && p.numKeys >= 2) {
-                        // If expression is active, expression values override keyframe values
+                        // Expression takes priority: use source property timing/values
                         var hasExpr = false;
-                        try { hasExpr = p.canSetExpression && p.expressionEnabled && p.expression !== ""; } catch (e) { }
+                        try { hasExpr = p.expressionEnabled && p.expression !== ""; } catch (e) { }
                         if (hasExpr) {
                             processExpressionProperty(p, entries, rs, re);
                         } else {
@@ -519,6 +538,7 @@
             if (forceMode === 0 || forceMode === undefined) {
                 // First pass: find the globally earliest selected keyframe across all layers
                 var globalFirstTime = Infinity;
+                var anyKeySelected = false;
                 for (var L = 0; L < selectedLayers.length; L++) {
                     function findEarliestKeys(group) {
                         for (var i = 1; i <= group.numProperties; i++) {
@@ -526,6 +546,7 @@
                             if (p instanceof PropertyGroup) { findEarliestKeys(p); }
                             else if (p instanceof Property && p.numKeys >= 2) {
                                 var sk = p.selectedKeys;
+                                if (sk && sk.length >= 1) anyKeySelected = true;
                                 if (sk && sk.length >= 2) {
                                     var t = p.keyTime(sk[0]);
                                     if (t < globalFirstTime) globalFirstTime = t;
@@ -555,6 +576,9 @@
                 if (skBlocks.length > 0) {
                     output = skBlocks.join("\n\n\n");
                     modeUsed = "Selected Keyframes";
+                } else if (anyKeySelected) {
+                    statusText = "Select at least 2 keyframes to extract a transition.";
+                    return { output: null, modeUsed: "" };
                 }
             }
 
