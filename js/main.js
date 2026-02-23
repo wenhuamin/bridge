@@ -103,3 +103,20 @@ function fallbackCopy(text) {
 elHelp.addEventListener('click', function () {
     csInterface.openURLInDefaultBrowser('https://www.notion.so/Bridge-js-Designer-Workflow-Guide-30e5f0c09a8080a39a98d5176c915c7f?source=copy_link');
 });
+
+// ── Scrollbar Cursor ──────────────────────────────────────────
+
+elOutput.addEventListener('mousemove', function (e) {
+    var rect = this.getBoundingClientRect();
+    var hasScrollbar = this.scrollHeight > this.clientHeight;
+    // Scrollbar is 10px wide, plus 1px border. 
+    if (hasScrollbar && e.clientX >= rect.right - 12) {
+        this.style.cursor = 'pointer';
+    } else {
+        this.style.cursor = 'text';
+    }
+});
+
+elOutput.addEventListener('mouseleave', function () {
+    this.style.cursor = 'text';
+});

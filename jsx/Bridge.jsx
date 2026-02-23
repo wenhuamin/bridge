@@ -173,6 +173,20 @@ function runExtraction(forceMode) {
 
         // ── Property type & formatting ────────────────────────────────
 
+        function formatPropName(prop) {
+            var name = prop.name;
+            var topLevel = (prop.parentProperty && prop.parentProperty.matchName === "ADBE Transform Group");
+            if (!topLevel) {
+                var n = name.toLowerCase();
+                if (n === "position" || n === "scale" || n === "rotation" || n === "opacity" || n === "anchor point" ||
+                    n === "x position" || n === "y position" || n === "z position" ||
+                    n === "x rotation" || n === "y rotation" || n === "z rotation") {
+                    name += " (Nested)";
+                }
+            }
+            return name;
+        }
+
         function getPropertyType(prop) {
             var pt = prop.propertyValueType;
             if (pt === PropertyValueType.COLOR) return "color";
@@ -206,9 +220,11 @@ function runExtraction(forceMode) {
                     }
                 }
             } else if (propType === "multi") {
-                var unit = (propName === "Scale" || propName === "Size") ? "%" : "";
+                var isScale = propName.indexOf("Scale") !== -1;
+                var isSize = propName.indexOf("Size") !== -1;
+                var unit = isScale ? "%" : "";
                 var axes = ["X", "Y", "Z"];
-                var isUniform = (propName === "Scale" || propName === "Size") &&
+                var isUniform = (isScale || isSize) &&
                     v1.length >= 2 &&
                     Math.abs(v1[0] - v1[1]) < 0.001 && Math.abs(v2[0] - v2[1]) < 0.001 &&
                     Math.abs(v1[0] - v2[0]) > 0.001;
@@ -223,8 +239,12 @@ function runExtraction(forceMode) {
                 } else {
                     for (var ax = 0; ax < v1.length && ax < axes.length; ax++) {
                         if (Math.abs(v1[ax] - v2[ax]) > 0.001) {
+                            var axName = axes[ax] + " " + propName;
+                            if (propName.indexOf(" (Nested)") !== -1) {
+                                axName = axes[ax] + " " + propName.replace(" (Nested)", "") + " (Nested)";
+                            }
                             entries.push(
-                                "Property: " + axes[ax] + " " + propName + "\n" +
+                                "Property: " + axName + "\n" +
                                 "Value Change: " + round2(v1[ax]) + unit + arrow + round2(v2[ax]) + unit + "\n" +
                                 "Delay: " + delayStr + "\n" +
                                 "Duration: " + durationStr + "\n" +
@@ -234,8 +254,9 @@ function runExtraction(forceMode) {
                     }
                 }
             } else {
-                var fv1 = (propName === "Opacity") ? round2(v1) + "%" : round2(v1);
-                var fv2 = (propName === "Opacity") ? round2(v2) + "%" : round2(v2);
+                var isOpacity = propName.indexOf("Opacity") !== -1;
+                var fv1 = isOpacity ? round2(v1) + "%" : round2(v1);
+                var fv2 = isOpacity ? round2(v2) + "%" : round2(v2);
                 entries.push(
                     "Property: " + propName + "\n" +
                     "Value Change: " + fv1 + arrow + fv2 + "\n" +
@@ -263,7 +284,7 @@ function runExtraction(forceMode) {
                 if (!hasValueChange(v1, v2)) continue;
                 var delay = (t1 - waStart) * 1000;
                 var duration = (t2 - t1) * 1000;
-                buildEntries(propType, prop.name, v1, v2,
+                buildEntries(propType, formatPropName(prop), v1, v2,
                     Math.round(delay) + "ms", Math.round(duration) + "ms",
                     computeCubic(prop, k, t1, t2, v1, v2), entries);
             }
@@ -300,31 +321,93 @@ function runExtraction(forceMode) {
 
         // ── findSourceProperty ────────────────────────────────────────
 
-        function findSourceProperty(expression) {
+        function findSourceProperty(prop) {
+            var expression = prop.expression;
             var srcLayer = null;
+            try {
+                var p = prop;
+                while (p && p.parentProperty) { p = p.parentProperty; }
+                srcLayer = p;
+            } catch (e) { }
+
             var nameMatch = expression.match(/thisComp\.layer\(["']([^"']+)["']\)/);
             if (nameMatch) { try { srcLayer = comp.layer(nameMatch[1]); } catch (e) { } }
-            if (!srcLayer) {
+            else {
                 var idxMatch = expression.match(/thisComp\.layer\((\d+)\)/);
                 if (idxMatch) { try { srcLayer = comp.layer(parseInt(idxMatch[1], 10)); } catch (e) { } }
             }
             if (!srcLayer) return null;
+
             var propMatch = expression.match(/\.transform\.(\w+)/);
-            if (!propMatch) return null;
-            var propMap = {
-                "opacity": "ADBE Opacity", "position": "ADBE Position",
-                "scale": "ADBE Scale", "rotation": "ADBE Rotate Z",
-                "xRotation": "ADBE Rotate X", "yRotation": "ADBE Rotate Y",
-                "anchorPoint": "ADBE Anchor Point",
-                "xPosition": "ADBE Position_0", "yPosition": "ADBE Position_1", "zPosition": "ADBE Position_2"
-            };
-            var matchName = propMap[propMatch[1]];
-            if (!matchName) return null;
-            var tg = srcLayer.property("ADBE Transform Group");
-            if (!tg) return null;
-            var srcProp = tg.property(matchName);
-            if (!srcProp || !(srcProp instanceof Property) || srcProp.numKeys < 2) return null;
-            return srcProp;
+            if (propMatch) {
+                var propMap = {
+                    "opacity": "ADBE Opacity", "position": "ADBE Position",
+                    "scale": "ADBE Scale", "rotation": "ADBE Rotate Z",
+                    "xRotation": "ADBE Rotate X", "yRotation": "ADBE Rotate Y",
+                    "anchorPoint": "ADBE Anchor Point",
+                    "xPosition": "ADBE Position_0", "yPosition": "ADBE Position_1", "zPosition": "ADBE Position_2"
+                };
+                var matchName = propMap[propMatch[1]];
+                if (matchName) {
+                    var tg = srcLayer.property("ADBE Transform Group");
+                    if (tg) {
+                        var srcProp = tg.property(matchName);
+                        if (srcProp && (srcProp instanceof Property) && srcProp.numKeys >= 2) return srcProp;
+                    }
+                }
+            }
+
+            // Fallback: Fuzzy match against ALL animated properties on srcLayer
+            var candidates = [];
+            function scanAnimatedProps(group) {
+                for (var i = 1; i <= group.numProperties; i++) {
+                    var child; try { child = group.property(i); } catch (e) { continue; }
+                    if (child instanceof PropertyGroup) { scanAnimatedProps(child); }
+                    else if (child instanceof Property && child.numKeys >= 2) {
+                        candidates.push(child);
+                    }
+                }
+            }
+            try { scanAnimatedProps(srcLayer); } catch (e) { }
+
+            var bestProp = null;
+            var bestScore = 0;
+            var exprLower = expression.toLowerCase();
+
+            for (var c = 0; c < candidates.length; c++) {
+                var score = 0;
+                var cand = candidates[c];
+                var nLower = cand.name.toLowerCase();
+
+                if (exprLower.indexOf(nLower) !== -1 || exprLower.indexOf(cand.matchName.toLowerCase()) !== -1) {
+                    score += 10;
+                } else {
+                    var mapped = "";
+                    var mN = cand.matchName;
+                    if (mN === "ADBE Vector Rect Size" || mN === "ADBE Vector Ellipse Size") mapped = "size";
+                    else if (mN === "ADBE Vector Rect Position" || mN === "ADBE Vector Ellipse Position") mapped = "position";
+                    else if (mN === "ADBE Vector Rect Roundness") mapped = "roundness";
+                    else if (mN.indexOf("Slider") !== -1) mapped = "slider";
+                    else if (mN.indexOf("Color") !== -1) mapped = "color";
+
+                    if (mapped && exprLower.indexOf(mapped) !== -1) score += 10;
+                }
+
+                var parent = cand.parentProperty;
+                while (parent && parent.name !== srcLayer.name) {
+                    var parentName = parent.name.toLowerCase();
+                    if (parentName !== "contents" && parentName !== "transform" && parentName !== "effects") {
+                        if (exprLower.indexOf(parentName) !== -1) score += 5;
+                    }
+                    parent = parent.parentProperty;
+                }
+
+                if (score > bestScore && score >= 10) {
+                    bestScore = score;
+                    bestProp = cand;
+                }
+            }
+            return bestProp;
         }
 
         // ── processExpressionProperty ─────────────────────────────────
@@ -335,7 +418,7 @@ function runExtraction(forceMode) {
             if (rangeStart === undefined) rangeStart = waStart;
             if (rangeEnd === undefined) rangeEnd = waEnd;
             var propType = getPropertyType(prop);
-            var srcProp = findSourceProperty(prop.expression);
+            var srcProp = findSourceProperty(prop);
             if (srcProp) {
                 for (var k = 1; k < srcProp.numKeys; k++) {
                     var t1 = srcProp.keyTime(k);
@@ -344,7 +427,7 @@ function runExtraction(forceMode) {
                     var v1 = prop.valueAtTime(t1, false);
                     var v2 = prop.valueAtTime(t2, false);
                     if (!hasValueChange(v1, v2)) continue;
-                    buildEntries(propType, prop.name, v1, v2,
+                    buildEntries(propType, formatPropName(prop), v1, v2,
                         Math.round((t1 - waStart) * 1000) + "ms",
                         Math.round((t2 - t1) * 1000) + "ms",
                         computeCubic(srcProp, k, t1, t2, srcProp.keyValue(k), srcProp.keyValue(k + 1)), entries);
@@ -357,7 +440,7 @@ function runExtraction(forceMode) {
                     var v1 = prop.valueAtTime(t1, false);
                     var v2 = prop.valueAtTime(t2, false);
                     if (!hasValueChange(v1, v2)) continue;
-                    buildEntries(propType, prop.name, v1, v2,
+                    buildEntries(propType, formatPropName(prop), v1, v2,
                         Math.round((t1 - waStart) * 1000) + "ms",
                         Math.round((t2 - t1) * 1000) + "ms",
                         "expression", entries);
@@ -475,9 +558,49 @@ function runExtraction(forceMode) {
             return m ? parseInt(m[1], 10) : 0;
         }
 
+        function isTopLevelProp(name) {
+            if (name.indexOf("(Nested)") !== -1) return false;
+            var n = name.toLowerCase();
+            return (n === "anchor point" || n === "position" || n === "scale" ||
+                n === "rotation" || n === "opacity" ||
+                n === "x position" || n === "y position" || n === "z position" ||
+                n === "x rotation" || n === "y rotation" || n === "z rotation");
+        }
+
+        function getPropPriority(name) {
+            var n = name.toLowerCase();
+            var isNested = !isTopLevelProp(name);
+
+            if (!isNested) {
+                if (n.indexOf("anchor point") !== -1) return 1;
+                if (n.indexOf("x position") !== -1) return 2;
+                if (n.indexOf("y position") !== -1) return 3;
+                if (n.indexOf("z position") !== -1) return 4;
+                if (n.indexOf("position") !== -1) return 5;
+                if (n.indexOf("scale") !== -1) return 6;
+                if (n.indexOf("rotation") !== -1) return 7;
+                if (n.indexOf("opacity") !== -1) return 8;
+                return 10;
+            } else {
+                if (n.indexOf("size") !== -1) {
+                    if (n.indexOf("x size") !== -1) return 20;
+                    if (n.indexOf("y size") !== -1) return 21;
+                    return 22;
+                }
+                if (n.indexOf("x position") !== -1) return 23;
+                if (n.indexOf("y position") !== -1) return 24;
+                if (n.indexOf("z position") !== -1) return 25;
+                if (n.indexOf("position") !== -1) return 26;
+                if (n.indexOf("roundness") !== -1) return 27;
+                if (n.indexOf("color") !== -1) return 28;
+                return 100;
+            }
+        }
+
         function entryPropName(entry) {
             var m = entry.match(/^Property: (.+)/);
-            return m ? m[1] : "";
+            if (!m) return "";
+            return m[1].replace(/^\s+|\s+$/g, "");
         }
 
         function groupAndSort(entries) {
@@ -491,7 +614,18 @@ function runExtraction(forceMode) {
             for (var k in groups) {
                 groups[k].sort(function (a, b) { return a.delay - b.delay; });
             }
-            order.sort(function (a, b) { return groups[a][0].delay - groups[b][0].delay; });
+            order.sort(function (a, b) {
+                var aTop = isTopLevelProp(a);
+                var bTop = isTopLevelProp(b);
+                if (aTop && !bTop) return -1;
+                if (!aTop && bTop) return 1;
+
+                var dA = groups[a][0].delay;
+                var dB = groups[b][0].delay;
+                if (dA !== dB) return dA - dB;
+                // Secondary sort: Priority hierarchy
+                return getPropPriority(a) - getPropPriority(b);
+            });
             var result = [];
             for (var g = 0; g < order.length; g++) {
                 var grp = groups[order[g]];
@@ -547,12 +681,12 @@ function runExtraction(forceMode) {
         var selectedLayers = comp.selectedLayers;
         var output = null;
         var modeUsed = "";
+        var anyKeySelected = false;
 
         // ── Mode 0: Selected keyframes ────────────────────────────────
 
         if (forceMode === 0 || forceMode === undefined) {
             var globalFirstTime = Infinity;
-            var anyKeySelected = false;
             for (var L = 0; L < selectedLayers.length; L++) {
                 function findEarliestKeys(group) {
                     for (var i = 1; i <= group.numProperties; i++) {
@@ -589,18 +723,15 @@ function runExtraction(forceMode) {
             if (skBlocks.length > 0) {
                 output = skBlocks.join("\n\n\n");
                 modeUsed = "Selected Keyframes";
-            } else if (anyKeySelected) {
-                // Single keyframe selected — not enough for a transition pair
-                return jsonStr({ error: "Select at least 2 keyframes to extract a transition." });
             } else if (forceMode === 0) {
-                // Keys button forced but nothing selected
+                // Keys button forced but no transition pairs found
                 return jsonStr({ error: "Select at least 2 keyframes to extract a transition." });
             }
         }
 
         // ── Mode 1: Single property ───────────────────────────────────
 
-        if (output === null && forceMode !== 2 && forceMode !== 3) {
+        if (output === null && forceMode !== 2 && forceMode !== 3 && !anyKeySelected) {
             if (selectedLayers.length === 1) {
                 var selProps = selectedLayers[0].selectedProperties;
                 var animatedProps = [];
